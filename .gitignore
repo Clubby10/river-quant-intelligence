@@ -1,0 +1,41 @@
+# Local agent instructions and project knowledge
+.agents/
+.codex/
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
+[Aa][Gg][Ee][Nn][Tt].[Mm][Dd]
+PROJECT_KNOWLEDGE.md
+
+# Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local configuration, secrets, and KX licenses
+.env
+.env.*
+!.env.example
+!.env.*.example
+kc.lic
+k4.lic
+
+# Logs and macOS metadata
+*.log
+.DS_Store
+
+# Captured market data
+/data/raw/
