@@ -37,5 +37,5 @@ k4.lic
 *.log
 .DS_Store
 
-# Captured market data
-/data/raw/
+# Local market data and database snapshots
+/data/
