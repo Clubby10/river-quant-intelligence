@@ -75,9 +75,12 @@ async def collect_trades() -> None:
 
                             for trade in message["data"]:
                                 record = normalize_trades(trade, received_at)
-                                output.write(json.dumps(record) + "\n")
+                                try:
+                                    output.write(json.dumps(record) + "\n")
+                                except OSError as error:
+                                    raise RuntimeError(f"Failed to save trade to {OUTPUT_PATH}: {error}")
+                                
                                 trade_count += 1
-
                                 retry_delay = INITIAL_RETRY_DELAY
 
                             print(f"\rTrades saved this run: {trade_count:,}", end="", flush=True,)
