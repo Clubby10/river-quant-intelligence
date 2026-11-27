@@ -10,6 +10,10 @@ from pathlib import Path
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
+from pykx.exceptions import QError
+
+from .q_writer import QWriter, open_writer
+
 WEBSOCKET_URL = "wss://ws.kraken.com/v2"
 SYMBOL = "BTC/USD"
 
@@ -17,6 +21,7 @@ CRYPTO, CURRENCY = SYMBOL.split("/")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = PROJECT_ROOT / "data" / "raw" / f"{CRYPTO.lower()}_{CURRENCY.lower()}_trades.jsonl"
+SNAPSHOT_PATH = PROJECT_ROOT / "data" / "trades"
 
 INITIAL_RETRY_DELAY = 1
 MAX_RETRY_DELAY = 30
@@ -33,9 +38,10 @@ def normalize_trades(trade: dict, received_at: str) -> dict:
         "side": trade["side"],
     }
 
-async def collect_trades() -> None:
+async def collect_trades(writer: QWriter) -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     trade_count = 0
+    inserted_count = 0
     retry_delay = INITIAL_RETRY_DELAY
 
     subscription = {
@@ -75,17 +81,25 @@ async def collect_trades() -> None:
                             if (message.get("channel") != "trade" or message.get("type") != "update"):
                                 continue
 
-                            for trade in message["data"]:
-                                record = normalize_trades(trade, received_at)
-                                try:
+                            records = [normalize_trades(trade, received_at) for trade in message["data"]]
+                            try:
+                                for record in records:
                                     output.write(json.dumps(record) + "\n")
-                                except OSError as error:
-                                    raise RuntimeError(f"Failed to save trade to {OUTPUT_PATH}: {error}")
+                                    trade_count += 1
+                            except OSError as error:
+                                raise RuntimeError(f"Failed to save trade to {OUTPUT_PATH}: {error}") from error
+                            
+                            for record in records:
+                                try:
+                                    inserted = await writer.write_trade(record)
+                                except (OSError, QError) as error:
+                                    raise RuntimeError("Databse write failed. " "The received batch was recored in JSONL") from error
                                 
-                                trade_count += 1
-                                retry_delay = INITIAL_RETRY_DELAY
+                                inserted_count += int(inserted)
+                                
+                            retry_delay = INITIAL_RETRY_DELAY
 
-                            print(f"\rTrades saved this run: {trade_count:,}", end="", flush=True,)
+                            print(f"\rJSONL records: {trade_count:,} | " f"New q rows: {inserted_count}", end="", flush=True,)
 
                         raise ConnectionError("The exchange closed the connection.")
                     
@@ -98,9 +112,20 @@ async def collect_trades() -> None:
         finally:
             print(f"\n Collection ended. " f"Saved {trade_count:,} trades this run.")
 
+async def main() -> None:
+    async with open_writer() as writer:
+        print(f"Connected to q. Exisiting rows: {await writer.count_trades()}")
+
+        try:
+            await collect_trades(writer)
+        finally:
+            print("\nSaving databse snapshot...")
+            await writer.save_snapshot(SNAPSHOT_PATH)
+            print(f"Saved snapshot: {SNAPSHOT_PATH}")
+
 if __name__ == "__main__":
     try: 
-        asyncio.run(collect_trades())
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("Stopped by user.")
     except (OSError, WebSocketException, RuntimeError) as error:

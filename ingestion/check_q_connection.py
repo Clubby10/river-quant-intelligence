@@ -1,16 +1,19 @@
 """Check connection to q database"""
 
-import pykx as kx
+import asyncio
+from pathlib import Path
 
-Q_HOST = "localhost"
-Q_PORT = 5001
+from .q_writer import open_writer
 
-def main() -> None:
-    with kx.SyncQConnection(host=Q_HOST, port=Q_PORT) as connection:
-        row_count = connection("count trades").py()
+async def main() -> None:
+    snapshot_path = Path(__file__).resolve().parents[1] / "data"/ "trades"
+    
+    async with open_writer() as writer:
+        row_count = await writer.count_trades()
         print(f"Connected to q. Trades in memory: {row_count}")
 
-        print(connection("select from trades where i<5"))
+        await writer.save_snapshot(snapshot_path)
+        print(f"Saved snapshot: {snapshot_path}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

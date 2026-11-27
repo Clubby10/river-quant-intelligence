@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pykx as kx
 
+from .q_writer import INSERT_TRADE
 from .trade_types import to_q_row
 
 Q_HOST = "localhost"
@@ -32,13 +33,6 @@ def load_rows() -> list[kx.List]:
                 break
 
     return rows 
-
-INSERT_TRADE = (
-    "{[r] "
-    "if[any ((trades`sym)=r 2)&((trades`tradeId)=r 5); :0j]; "
-    "`trades insert r; "
-    "1j}"
-)
 
 def main() -> None:
     rows = load_rows()
