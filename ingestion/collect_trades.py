@@ -1,13 +1,17 @@
-"""Collect live CRYPTO/CURRENCY trades from Kraken's public WebSocket feed"""
+"""Collect live CRYPTO/CURRENCY trades from Kraken's public WebSocket feed and write them ot q through a backlog worker."""
 
 import asyncio
 import json
+import os
 import sys
 import threading
-import pykx as kx
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+
+os.environ["PYKX_THREADING"] = "1"
+
+import pykx as kx
 
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException

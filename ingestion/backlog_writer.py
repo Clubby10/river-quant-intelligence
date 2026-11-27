@@ -26,6 +26,7 @@ def is_connection_failure(error: Exception) -> bool:
         message = str(error).lower()
 
         return (message.startswith(("hop.", "recv.", "send."))
+                or message.startswith("failed to send query on ipc socker:")
                 or "query timed out" in message
                 or "closed ipc connection" in message
                 or "connection closed" in message)
