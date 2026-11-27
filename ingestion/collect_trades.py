@@ -3,6 +3,8 @@
 import asyncio
 import json
 import sys
+import threading
+import pykx as kx
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -10,9 +12,7 @@ from pathlib import Path
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
-from pykx.exceptions import QError
-
-from .q_writer import QWriter, open_writer
+from .backlog_writer import run_writer
 
 WEBSOCKET_URL = "wss://ws.kraken.com/v2"
 SYMBOL = "BTC/USD"
@@ -38,10 +38,9 @@ def normalize_trades(trade: dict, received_at: str) -> dict:
         "side": trade["side"],
     }
 
-async def collect_trades(writer: QWriter) -> None:
+async def collect_trades() -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     trade_count = 0
-    inserted_count = 0
     retry_delay = INITIAL_RETRY_DELAY
 
     subscription = {
@@ -88,18 +87,10 @@ async def collect_trades(writer: QWriter) -> None:
                                     trade_count += 1
                             except OSError as error:
                                 raise RuntimeError(f"Failed to save trade to {OUTPUT_PATH}: {error}") from error
-                            
-                            for record in records:
-                                try:
-                                    inserted = await writer.write_trade(record)
-                                except (OSError, QError) as error:
-                                    raise RuntimeError("Databse write failed. " "The received batch was recored in JSONL") from error
-                                
-                                inserted_count += int(inserted)
                                 
                             retry_delay = INITIAL_RETRY_DELAY
 
-                            print(f"\rJSONL records: {trade_count:,} | " f"New q rows: {inserted_count}", end="", flush=True,)
+                            print(f"\rJSONL records: {trade_count:,}", end="", flush=True,)
 
                         raise ConnectionError("The exchange closed the connection.")
                     
@@ -113,21 +104,27 @@ async def collect_trades(writer: QWriter) -> None:
             print(f"\n Collection ended. " f"Saved {trade_count:,} trades this run.")
 
 async def main() -> None:
-    async with open_writer() as writer:
-        print(f"Connected to q. Exisiting rows: {await writer.count_trades()}")
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.touch(exist_ok=True)
 
-        try:
-            await collect_trades(writer)
-        finally:
-            print("\nSaving databse snapshot...")
-            await writer.save_snapshot(SNAPSHOT_PATH)
-            print(f"Saved snapshot: {SNAPSHOT_PATH}")
+    stop = threading.Event()
+
+    try:
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(collect_trades(), name="market-collector",)
+
+            tasks.create_task(asyncio.to_thread(run_writer, OUTPUT_PATH, SNAPSHOT_PATH, stop,), name="database-writer",)
+
+    finally:
+        stop.set()
 
 if __name__ == "__main__":
     try: 
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Stopped by user.")
-    except (OSError, WebSocketException, RuntimeError) as error:
-        print(f"Collector error: {error}", file=sys.stderr)
-        sys.exit(1)
+    except Exception as error:
+        print(f"Ingestion stopped: {error}", file=sys.stderr)
+        raise
+    finally:
+        kx.shutdown_thread()
