@@ -1,4 +1,4 @@
-"""Collect live BTC/CAD trades from Kraken's public WebSocket feed"""
+"""Collect live CRYPTO/CURRENCY trades from Kraken's public WebSocket feed"""
 
 import asyncio
 import json
@@ -11,10 +11,12 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
 WEBSOCKET_URL = "wss://ws.kraken.com/v2"
-SYMBOL = "BTC/CAD"
+SYMBOL = "BTC/USD"
+
+CRYPTO, CURRENCY = SYMBOL.split("/")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = PROJECT_ROOT / "data" / "raw" / "btc_cad_trades.jsonl"
+OUTPUT_PATH = PROJECT_ROOT / "data" / "raw" / f"{CRYPTO.lower()}_{CURRENCY.lower()}_trades.jsonl"
 
 INITIAL_RETRY_DELAY = 1
 MAX_RETRY_DELAY = 30
