@@ -49,7 +49,7 @@ def follow_file(connection: kx.SyncQConnection, path: Path, stop: threading.Even
                 source.seek(position)
                 current = (processed, rejections.count)
 
-                if processed != last_reported:
+                if current != last_reported:
                     print(f"\nWriter: processed={processed:,}, "
                         f"inserted={inserted:,}, "
                         f"skipped={processed - inserted:,}",

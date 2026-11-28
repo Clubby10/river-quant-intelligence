@@ -16,7 +16,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
 from .backlog_writer import run_writer
-from .exchange_messages import extract_trade
+from .exchange_messages import extract_trades
 from .rejections import RejectionLog
 
 WEBSOCKET_URL = "wss://ws.kraken.com/v2"
@@ -63,7 +63,7 @@ async def collect_trades() -> None:
 
                         async for raw_message in websocket:
                             received_at = datetime.now(timezone.utc).isoformat()
-                            records = extract_trade(raw_message, received_at, SYMBOL, rejections,)
+                            records = extract_trades(raw_message, received_at, SYMBOL, rejections,)
 
                             try:
                                 for record in records:
