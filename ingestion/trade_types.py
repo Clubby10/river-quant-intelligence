@@ -3,6 +3,8 @@
 import numpy as np
 import pykx as kx
 
+from .trade_validation import validate_trade
+
 def to_q_timestamp(value: str) -> kx.TimestampAtom:
     if value.endswith("Z"):
         utc_value = value[:-1]
@@ -19,8 +21,7 @@ def to_q_timestamp(value: str) -> kx.TimestampAtom:
     return kx.TimestampAtom(timestamp)
 
 def to_q_row(record: dict) -> kx.List:
-    if record["exchange"] != "kraken":
-        raise ValueError("THis importer currently only support Kraken trades only.")
+    validate_trade(record)
     
     return kx.List([
         to_q_timestamp(record["exchange_timestamp"]),
