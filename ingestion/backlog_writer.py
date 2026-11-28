@@ -9,6 +9,7 @@ from pykx.exceptions import QError
 from .import_trades import save_snapshot
 from .q_writer import INSERT_TRADE, Q_HOST, Q_PORT
 from .trade_types import to_q_row
+from .rejections import RejectionLog
 
 from pathlib import Path
 from time import monotonic
@@ -36,7 +37,8 @@ def is_connection_failure(error: Exception) -> bool:
 def follow_file(connection: kx.SyncQConnection, path: Path, stop: threading.Event,) -> None:
     processed = 0
     inserted = 0
-    last_reported = -1
+    last_reported = None
+    rejections = RejectionLog()
 
     with path.open("rb") as source:
         while not stop.is_set():
@@ -45,13 +47,14 @@ def follow_file(connection: kx.SyncQConnection, path: Path, stop: threading.Even
 
             if not line or not line.endswith(b"\n"):
                 source.seek(position)
+                current = (processed, rejections.count)
 
                 if processed != last_reported:
                     print(f"\nWriter: processed={processed:,}, "
                         f"inserted={inserted:,}, "
                         f"skipped={processed - inserted:,}",
                         flush=True,)
-                    last_reported = processed
+                    last_reported = current
 
                 stop.wait(POLL_INTERVAL)
                 continue
@@ -59,18 +62,20 @@ def follow_file(connection: kx.SyncQConnection, path: Path, stop: threading.Even
             if not line.strip():
                 continue
 
-            try:
-                record = json.loads(line)
-                row = to_q_row(record)
-            except (KeyError, TypeError, ValueError, OverflowError) as error:
-                raise ValueError(f"Invalid trade at byte offset {position}: {error}") from error
+            record = rejections.parse(line, path, position)
+
+            if record is None:
+                continue
             
+            row = to_q_row(record)
             inserted += connection(INSERT_TRADE, row).py()
             processed += 1
 
             if processed % 1_000 == 0:
                 print(f"\nWriter: processed={processed:,}, "
-                    f"inserted={inserted:,}",
+                    f"inserted={inserted:,}, "
+                    f"duplicates={processed - inserted:,}, "
+                    f"rejected={rejections.count:,}",
                     flush=True,)
                 
 def _run_writer(input_path: Path, snapshot_path: Path, stop: threading.Event,) -> None:

@@ -25,7 +25,7 @@ UTC_TIMESTAMP = re.compile(
 )
 
 def validate_positive_number(value: object, field: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, value, (str, int, float, Decimal)):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
         raise ValueError(f"{field} must be a number or numeric string.")
     
     try:
