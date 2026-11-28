@@ -15,25 +15,34 @@ class RejectionLog:
         self.path = path
         self.count = 0
 
-    def parse(self, raw: bytes, source: Path, offset: int,) -> dict | None:
+    def write(self, raw: bytes, source: str, reason: str, *, offset: int | None = None, item_index: int | None = None) -> None:
+        entry = {
+            "rejected_at": datetime.now(timezone.utc).isoformat(),
+            "source": source,
+            "byte_offset": offset,
+            "item_index": item_index,
+            "reason": reason,
+            "raw_text": raw.decode("utf-8", errors="replace"),
+            "raw_base64": base64.b64encode(raw).decode("ascii"),
+        }
+
         try:
-            record = json.loads(raw.decode("utf-8"))
-            validate_trade(record)
-        except (UnicodeError, ValueError) as error:
-            entry = {"rejected_at": datetime.now(timezone.utc).isoformat(),
-                    "source": str(source.resolve()),
-                    "byte_offset": offset,
-                    "reason": str(error),
-                    "raw_text": raw.decode("utf-8", errors="replace"),
-                    "raw_base64": base64.b64encode(raw).decode("ascii"),}
-            
             self.path.parent.mkdir(parents=True, exist_ok=True)
 
             with self.path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(entry, allow_nan=False) + "\n")
 
-            self.count += 1
+        except OSError as error:
+            raise RuntimeError(f"Could not write rejection log {self.path}: {error}") from error
+        
+        self.count += 1
+
+    def parse(self, raw: bytes, source: Path, offset: int,) -> dict | None:
+        try:
+            record = json.loads(raw.decode("utf-8"))
+            validate_trade(record)
+        except (UnicodeError, ValueError) as error:
+            self.write (raw, str(source.resolve()), str(error), offset=offset)
             return None
         
         return record
-    
